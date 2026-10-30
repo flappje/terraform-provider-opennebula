@@ -239,6 +239,132 @@ func TestTemplateUpdateAddsNICAlias(t *testing.T) {
 	}
 }
 
+func osWithFirmwareSecure(enabled bool) []interface{} {
+	return []interface{}{
+		map[string]interface{}{
+			"arch":            "x86_64",
+			"boot":            "disk0",
+			"machine":         "q35",
+			"firmware":        "UEFI",
+			"firmware_secure": enabled,
+		},
+	}
+}
+
+func TestOSFirmwareSecureYesNo(t *testing.T) {
+	for _, tc := range []struct {
+		value bool
+		want  string
+	}{
+		{true, "YES"},
+		{false, "NO"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			tpl := createdTemplate(t, withChange(baseTemplateConfig(), "os", osWithFirmwareSecure(tc.value)))
+			got, err := tpl.GetOS(vmk.FirmwareSecure)
+			if err != nil || got != tc.want {
+				t.Fatalf("firmware_secure %v: got %q err=%v, want %s", tc.value, got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestFlattenOSFirmwareSecure(t *testing.T) {
+	for _, tc := range []struct {
+		stored string
+		want   bool
+	}{
+		{"YES", true},
+		{"NO", false},
+		{"true", false},
+		{"false", false},
+	} {
+		t.Run(tc.stored, func(t *testing.T) {
+			readTpl := vm.NewTemplate()
+			if err := readTpl.AddOS(vmk.Arch, "x86_64"); err != nil {
+				t.Fatal(err)
+			}
+			if err := readTpl.AddOS(vmk.Boot, "disk0"); err != nil {
+				t.Fatal(err)
+			}
+			if err := readTpl.AddOS(vmk.FirmwareSecure, tc.stored); err != nil {
+				t.Fatal(err)
+			}
+
+			d := schema.TestResourceDataRaw(t, resourceOpennebulaTemplate().Schema, map[string]interface{}{
+				"name": "firmware-secure",
+			})
+			if err := flattenTemplate(d, map[string]interface{}{}, readTpl); err != nil {
+				t.Fatal(err)
+			}
+			osList := d.Get("os").([]interface{})
+			if len(osList) != 1 {
+				t.Fatalf("os length = %d, want 1", len(osList))
+			}
+			if got := osList[0].(map[string]interface{})["firmware_secure"]; got != tc.want {
+				t.Fatalf("firmware_secure %q: got %#v, want %v", tc.stored, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTemplateUpdateOSFirmwareSecure(t *testing.T) {
+	for _, tc := range []struct {
+		from bool
+		to   bool
+		want string
+	}{
+		{false, true, "YES"},
+		{true, false, "NO"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			prior := withChange(baseTemplateConfig(), "os", osWithFirmwareSecure(tc.from))
+			next := withChange(baseTemplateConfig(), "os", osWithFirmwareSecure(tc.to))
+
+			tpl, _ := applyCreatedTemplateUpdate(t, prior, next)
+			got, err := tpl.GetOS(vmk.FirmwareSecure)
+			if err != nil || got != tc.want {
+				t.Fatalf("firmware_secure = %q err=%v, want %s\n%s", got, err, tc.want, tpl.String())
+			}
+		})
+	}
+}
+
+func TestUpdateVMOSFirmwareSecure(t *testing.T) {
+	tpl := vm.NewTemplate()
+	if err := tpl.AddOS(vmk.Arch, "x86_64"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tpl.AddOS(vmk.Firmware, "UEFI"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tpl.AddOS(vmk.FirmwareSecure, "NO"); err != nil {
+		t.Fatal(err)
+	}
+
+	applied := map[string]interface{}{
+		"arch":            "x86_64",
+		"firmware":        "UEFI",
+		"firmware_secure": false,
+	}
+	next := map[string]interface{}{
+		"arch":            "x86_64",
+		"firmware":        "UEFI",
+		"firmware_secure": true,
+	}
+	if err := updateVMTemplateVec(tpl, "OS", osTemplateConfig(applied), osTemplateConfig(next)); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := tpl.GetOS(vmk.FirmwareSecure)
+	if err != nil || got != "YES" {
+		t.Fatalf("firmware_secure = %q err=%v, want YES\n%s", got, err, tpl.String())
+	}
+	if strings.Contains(tpl.String(), "true") || strings.Contains(tpl.String(), "false") {
+		t.Fatalf("OS update wrote a bool:\n%s", tpl.String())
+	}
+}
+
 func TestTemplateUpdateOSFirmwareUEFIToBIOS(t *testing.T) {
 	prior := baseTemplateConfig()
 	next := withChange(prior, "os", []interface{}{
@@ -259,6 +385,10 @@ func TestTemplateUpdateOSFirmwareUEFIToBIOS(t *testing.T) {
 	arch, _ := tpl.GetOS(vmk.Arch)
 	if arch != "x86_64" {
 		t.Fatalf("arch = %q, want x86_64", arch)
+	}
+	firmwareSecure, _ := tpl.GetOS(vmk.FirmwareSecure)
+	if firmwareSecure != "NO" {
+		t.Fatalf("firmware_secure = %q, want NO", firmwareSecure)
 	}
 }
 
@@ -282,6 +412,10 @@ func TestTemplateUpdateClearsOSFirmware(t *testing.T) {
 	machine, _ := tpl.GetOS(vmk.Machine)
 	if machine != "pc" {
 		t.Fatalf("machine = %q, want pc", machine)
+	}
+	firmwareSecure, _ := tpl.GetOS(vmk.FirmwareSecure)
+	if firmwareSecure != "NO" {
+		t.Fatalf("firmware_secure = %q, want NO", firmwareSecure)
 	}
 }
 

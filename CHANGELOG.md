@@ -15,6 +15,7 @@ BUG FIXES:
 * resources/opennebula_template, opennebula_virtual_router_instance_template: send template content changes for `cpu`, `vcpu`, `memory`, `cpumodel`, `graphics`, `os`, `disk`, `nic`, and `nic_alias`, and return update errors instead of dropping them
 * resources/opennebula_template, opennebula_virtual_router_instance_template: keep the configured `context.PASSWORD` and `tags.one_password` when OpenNebula returns ciphertext, so a later update does not encrypt that ciphertext again
 * resources/opennebula_template, opennebula_virtual_machine, opennebula_virtual_router_instance_template: omit empty OS attributes so clearing a value such as `firmware` removes it
+* resources/opennebula_template, opennebula_virtual_machine, opennebula_virtual_router_instance, opennebula_virtual_router_instance_template: write `os.firmware_secure` as OpenNebula `YES` or `NO`
 
 # 1.5.0 (June 26th, 2025)
 

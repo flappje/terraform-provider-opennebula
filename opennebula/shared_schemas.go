@@ -788,9 +788,26 @@ func addOS(tpl *vm.Template, os []interface{}) {
 		addOSString(tpl, vmk.SDDiskBus, osconfig["sd_disk_bus"].(string))
 		addOSString(tpl, vmk.UUID, osconfig["uuid"].(string))
 		addOSString(tpl, vmk.Firmware, osconfig["firmware"].(string))
-		tpl.AddOS(vmk.FirmwareSecure, osconfig["firmware_secure"].(bool))
+		// OpenNebula accepts only YES or NO. A Go bool becomes "true"/"false".
+		tpl.AddOS(vmk.FirmwareSecure, boolToYesNo(osconfig["firmware_secure"].(bool)))
 	}
 
+}
+
+// osTemplateConfig copies an OS config and stores firmware_secure as YES or NO.
+// VM updates pass the map through fmt.Sprint, which would otherwise write a bool.
+func osTemplateConfig(osconfig map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(osconfig))
+	for key, value := range osconfig {
+		if key == "firmware_secure" {
+			if enabled, ok := value.(bool); ok {
+				out[key] = boolToYesNo(enabled)
+				continue
+			}
+		}
+		out[key] = value
+	}
+	return out
 }
 
 func addOSString(tpl *vm.Template, key vmk.OS, value string) {
@@ -1292,10 +1309,7 @@ func flattenTemplate(d *schema.ResourceData, inheritedVectors map[string]interfa
 
 	// Set OS to resource
 	if arch != "" {
-		firmwareSecureBool := false
-		if firmwareSecureErr == nil && firmwareSecure == "true" {
-			firmwareSecureBool = true
-		}
+		firmwareSecureBool := firmwareSecureErr == nil && yesNoToBool(firmwareSecure)
 
 		osMap = append(osMap, map[string]interface{}{
 			"arch":            arch,
